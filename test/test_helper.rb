@@ -6,7 +6,7 @@ SimpleCov.start do
   enable_coverage :branch
   track_files 'lib/sidekiq/ratomic/pool.rb'
   add_filter '/test/'
-  minimum_coverage line: 95, branch: 70
+  minimum_coverage line: 99, branch: 99
 end
 
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)

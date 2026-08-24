@@ -108,7 +108,7 @@ module Sidekiq
 
       def record_failure
         @state_mutex.synchronize do
-          @failure_count.increment
+          @failure_count.increment(1)
           if @failure_count.value >= @cb_threshold || @state == :half_open
             @state = :open
             @last_state_change = monotonic_time
