@@ -59,6 +59,14 @@ module Sidekiq
         end
       end
 
+      RactorResource = Data.define(:owner)
+      RactorFactory = Data.define(:owner) do
+        def call
+          RactorResource.new(owner)
+        end
+      end
+      RactorInput = Data.define(:owner, :factory)
+
       def build_pool(**, &validator)
         factory = ResourceFactory.new.freeze
         Pool.new(pool_name: :redis_pool, size: 5, **, validator: validator, factory: factory)
@@ -135,6 +143,72 @@ module Sidekiq
         assert_same first.instance_variable_get(:@state_mutex), second.instance_variable_get(:@state_mutex)
         assert_same first.instance_variable_get(:@failure_count), second.instance_variable_get(:@failure_count)
         assert_same first.instance_variable_get(:@state_holder), second.instance_variable_get(:@state_holder)
+      end
+
+      def test_configurations_keep_pool_runtimes_isolated
+        first = Pool.new(pool_name: :redis_pool, factory: ResourceFactory.new.freeze)
+        second = Pool.new(pool_name: :redis_pool, factory: ResourceFactory.new.freeze)
+
+        first.config = Object.new
+        second.config = Object.new
+
+        refute_same first.instance_variable_get(:@local_pool), second.instance_variable_get(:@local_pool)
+        refute_same first.instance_variable_get(:@state_mutex), second.instance_variable_get(:@state_mutex)
+      end
+
+      def test_middleware_runtime_is_not_ractor_shareable
+        pool = Pool.new(pool_name: :redis_pool, factory: ResourceFactory.new.freeze)
+
+        assert_raises(Ractor::Error) { Ractor.make_shareable(pool) }
+      end
+
+      def test_host_owned_ractors_receive_distinct_local_resources
+        factory = Ractor.make_shareable(RactorFactory.new(:host))
+        inputs = 4.times.map do |owner|
+          Ractor.make_shareable(RactorInput.new(owner, factory))
+        end
+        ractors = inputs.map do |input|
+          Ractor.new(input) do |ractor_input|
+            pool = Pool.new(pool_name: :redis_pool, size: 1, factory: ractor_input.factory)
+            resource = pool.with { |checked_out| checked_out }
+            result = [ractor_input.owner, resource.owner, resource.object_id]
+            pool.close
+            result
+          end
+        end
+
+        results = ractors.map(&:value)
+        owners = results.map { |result| result[1] }
+
+        assert_equal [0, 1, 2, 3], results.map(&:first)
+        assert_equal %i[host host host host], owners
+        assert_equal 4, results.map(&:last).uniq.size
+      end
+
+      def test_threads_share_the_pool_owned_by_their_ractor
+        factory = Ractor.make_shareable(RactorFactory.new(:threaded))
+        input = Ractor.make_shareable(RactorInput.new(:threaded, factory))
+        ractor = Ractor.new(input) do |ractor_input|
+          pool = Pool.new(pool_name: :redis_pool, size: 2, factory: ractor_input.factory)
+          resources = Queue.new
+          threads = 2.times.map do
+            Thread.new do
+              pool.with do |resource|
+                resources << resource
+                sleep 0.01
+              end
+            end
+          end
+          threads.each(&:value)
+          checked_out = 2.times.map { resources.pop }
+          pool.close
+          [checked_out.map(&:owner), checked_out.map(&:object_id).uniq.size]
+        end
+
+        owners, distinct_resources = ractor.value
+
+        assert_equal %i[threaded threaded], owners
+        assert_equal 2, distinct_resources
       end
 
       def test_rejects_invalid_configuration
