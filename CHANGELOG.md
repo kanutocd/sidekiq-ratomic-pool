@@ -6,6 +6,12 @@
   Sidekiq process/thread scheduling output.
 - Added an illustrative benchmark result, interpretation, and captured output
   snapshot documenting the workload and its limitations.
+- Added a matched `connection_pool` comparison runner using the same Redis,
+  Sidekiq, pooling, health-check, and workload settings.
+- Added a Ractor-native `4 × 20` benchmark and a four-process Sidekiq benchmark
+  demonstrating 80 total worker/resource capacity across independent runtimes.
+- Made the Ractor benchmark scalable for large job counts by using fixed worker
+  threads with queued jobs instead of creating one Ruby thread per job.
 - Linked the benchmark from the smoke-test documentation.
 
 ## [0.2.0] - 2026-08-25
