@@ -1,0 +1,7 @@
+plugins:
+  - rubocop-minitest
+  - rubocop-rake
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 4.0

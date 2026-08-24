@@ -1,0 +1,10 @@
+--title "sidekiq-ratomic-pool API Documentation"
+--readme README.md
+--markup markdown
+--output-dir doc
+lib/**/*.rb
+-
+README.md
+LICENSE.txt
+CHANGELOG.md
+CODE_OF_CONDUCT.md
