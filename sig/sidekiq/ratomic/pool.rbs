@@ -1,8 +1,47 @@
 module Sidekiq
   module Ratomic
-    module Pool
+    class Pool
       VERSION: String
-      # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+
+      class Error < StandardError
+      end
+
+      class CircuitOpenError < Error
+      end
+
+      attr_reader pool_name: Symbol
+      attr_reader size: Integer
+      attr_reader max_retries: Integer
+      attr_reader retry_delay: Numeric
+      attr_reader validator: ^(untyped) -> bool
+      attr_reader cb_threshold: Integer
+      attr_reader cb_timeout: Numeric
+
+      def initialize: (
+        pool_name: Symbol | String,
+        ?size: Integer,
+        ?max_retries: Integer,
+        ?retry_delay: Numeric,
+        ?cb_threshold: Integer,
+        ?cb_timeout: Numeric,
+        ?validator: ^(untyped) -> bool,
+        ?factory: _SidekiqRatomicFactory
+      ) { () -> untyped } -> void
+
+      def call: (untyped, untyped, untyped) { () -> untyped } -> untyped
+      def with: () { (untyped) -> untyped } -> untyped
+      def state: () -> Symbol
+      private
+      def check_circuit_state!: () -> void
+      def verify_health: (untyped) -> bool
+      def default_validator: (untyped) -> bool
+      def record_success: () -> void
+      def record_failure: () -> void
+      def monotonic_time: () -> Float
     end
   end
+end
+
+interface _SidekiqRatomicFactory
+  def call: () -> untyped
 end
