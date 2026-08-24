@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-25
+
 - Added a real Redis-backed `smoke_test/` harness with standalone Sidekiq client
   and server examples, Docker Compose Redis, and process/thread scheduling output.
 - Made the middleware compatible with Sidekiq's per-job middleware instantiation
