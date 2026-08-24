@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+- Added a dedicated `smoke_test/benchmark/` harness for comparative end-to-end
+  throughput measurements using real Redis, Sidekiq, and Ratomic pooling.
+- Added configurable benchmark workloads with elapsed-time, jobs-per-second, and
+  Sidekiq process/thread scheduling output.
+- Added an illustrative benchmark result, interpretation, and captured output
+  snapshot documenting the workload and its limitations.
+- Linked the benchmark from the smoke-test documentation.
+
 ## [0.2.0] - 2026-08-25
 
 - Added a real Redis-backed `smoke_test/` harness with standalone Sidekiq client
