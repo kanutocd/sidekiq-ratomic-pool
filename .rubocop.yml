@@ -30,3 +30,6 @@ Metrics/AbcSize:
 
 Metrics/PerceivedComplexity:
   Max: 10
+
+Style/DirectiveScope:
+  Enabled: false

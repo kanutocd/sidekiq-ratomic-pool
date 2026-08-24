@@ -9,12 +9,13 @@ require_relative 'pool/version'
 module Sidekiq
   # Ratomic-backed Sidekiq middleware namespace.
   module Ratomic
+    # rubocop:disable Metrics/ClassLength
     # Sidekiq server middleware that exposes a Ractor-local resource pool.
     #
     # Resources are validated before checkout and transient failures are retried
     # with exponential backoff. Persistent failures open the circuit breaker.
-    # rubocop:disable Metrics/ClassLength
     class Pool
+      # rubocop:disable Metrics/MethodLength
       # Name of the worker accessor populated by the middleware.
       # @return [Symbol]
       attr_reader :pool_name
@@ -51,7 +52,6 @@ module Sidekiq
       # @return [Array<Class>]
       attr_reader :retryable_errors
 
-      # rubocop:disable Metrics/MethodLength
       def initialize(options = nil, pool_name: nil, size: 10, pool_timeout: 1.0, max_retries: 3, retry_delay: 0.2,
                      cb_threshold: 5, cb_timeout: 30, validator: nil,
                      retryable_errors: [IOError, SystemCallError, Timeout::Error], factory: nil, &block)
@@ -94,6 +94,7 @@ module Sidekiq
         shareable_factory = make_shareable_factory(factory)
         @local_pool = ::Ratomic::LocalPool.new(size: @size, timeout: @pool_timeout, factory: shareable_factory)
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Share one pool runtime across Sidekiq's per-job middleware instances.
       def config=(config)
@@ -134,6 +135,7 @@ module Sidekiq
 
       alias shutdown close
 
+      # rubocop:disable Metrics/MethodLength
       # Check out a healthy resource and yield it to the caller.
       def with
         probe_reserved = check_circuit_state!
@@ -170,6 +172,7 @@ module Sidekiq
           raise
         end
       end
+      # rubocop:enable Metrics/MethodLength
 
       # Return the current circuit-breaker state.
       def state
@@ -302,7 +305,6 @@ module Sidekiq
         raise ArgumentError, "resource factory must be Ractor-shareable: #{e.message}"
       end
     end
-    # rubocop:enable Metrics/MethodLength
     # rubocop:enable Metrics/ClassLength
   end
 end
