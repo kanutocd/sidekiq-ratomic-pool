@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.summary = "Ractor-safe connection pooling for Sidekiq utilizing Ratomic's LocalPool."
   spec.description = <<~DESC
     Thread and Ractor safe connection pooling utilizing Ratomic's LocalPool for Sidekiq middleware
-    with circuit breakers and Prometheus metrics.
+    with health validation, exponential retries, and circuit breakers.
   DESC
   spec.homepage = 'https://kanutocd.github.io/sidekiq-ratomic-pool'
   spec.license = 'MIT'
