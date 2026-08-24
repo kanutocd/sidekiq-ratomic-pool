@@ -15,8 +15,41 @@ module Sidekiq
     # with exponential backoff. Persistent failures open the circuit breaker.
     # rubocop:disable Metrics/ClassLength
     class Pool
-      attr_reader :pool_name, :size, :pool_timeout, :max_retries, :retry_delay, :validator, :cb_threshold,
-                  :cb_timeout, :retryable_errors
+      # Name of the worker accessor populated by the middleware.
+      # @return [Symbol]
+      attr_reader :pool_name
+
+      # Maximum number of resources owned by each Ractor-local pool.
+      # @return [Integer]
+      attr_reader :size
+
+      # Maximum time to wait for a resource checkout.
+      # @return [Numeric, nil] seconds, or nil to wait indefinitely
+      attr_reader :pool_timeout
+
+      # Maximum number of retries for checkout and configured retryable failures.
+      # @return [Integer]
+      attr_reader :max_retries
+
+      # Base delay used for exponential retry backoff.
+      # @return [Numeric] seconds
+      attr_reader :retry_delay
+
+      # Callback used to validate a checked-out resource.
+      # @return [#call]
+      attr_reader :validator
+
+      # Number of recorded failures required to open the circuit.
+      # @return [Integer]
+      attr_reader :cb_threshold
+
+      # Time an open circuit remains open before a half-open probe.
+      # @return [Numeric] seconds
+      attr_reader :cb_timeout
+
+      # Exception classes treated as retryable worker/resource failures.
+      # @return [Array<Class>]
+      attr_reader :retryable_errors
 
       # rubocop:disable Metrics/MethodLength
       def initialize(options = nil, pool_name: nil, size: 10, pool_timeout: 1.0, max_retries: 3, retry_delay: 0.2,

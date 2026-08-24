@@ -27,6 +27,8 @@
 - Added matched benchmark results and documented their interpretation
   and comparison limitations.
 - Linked the benchmark from the smoke-test documentation.
+- Expanded YARD documentation for all public `Sidekiq::Ratomic::Pool` attribute
+  readers and clarified the host-owned Ractor integration contract.
 
 ## [0.2.0] - 2026-08-25
 
