@@ -27,7 +27,9 @@ and worker pool accessor pattern.
 
 ## Features
 
-- **Ractor-Local Isolation**: Each Ractor lazily owns its resources through `Ratomic::LocalPool`; threads within the same Ractor share that Ractor-local pool.
+- **Ractor-Local Isolation**: A pool runtime used inside a Ractor lazily owns
+  its resources through `Ratomic::LocalPool`; threads within that Ractor share
+  its Ractor-local pool.
 - **Circuit Breaker Pattern**: Trips open after a configurable threshold of checkout, health-check, or configured retryable I/O failures.
 - **Exponential Backoff**: Applies increasing retry delays to transient checkout and retryable resource-operation failures.
 - **Automated Health Probes**: Validates resources with `ping`, `active?`, or a caller-supplied validator before use.
@@ -69,6 +71,48 @@ redis_pool.with { |redis| redis.call('PING') }
 Resource checkout/health failures and configured retryable I/O errors use exponential backoff.
 Other exceptions raised by the worker block propagate without being retried, preventing
 accidental duplication of non-idempotent work.
+
+### Host-owned Ractor scheduling
+
+This gem provides Ractor-safe, Ractor-local resource ownership; it does not
+create Ractors or dispatch Sidekiq jobs into them. The host framework or
+application owns Ractor creation, job routing, supervision, and shutdown.
+
+`Sidekiq::Ratomic::Pool` contains mutable circuit-breaker coordination state and
+is not itself required to be Ractor-shareable. A Ractor-aware host should pass
+only shareable configuration and factory data into each Ractor, construct that
+Ractor's pool runtime there, and execute the resource-backed work inside the
+same Ractor:
+
+```ruby
+PoolInput = Data.define(:pool_name, :size, :factory, :jobs)
+
+ractor = Ractor.new(
+  Ractor.make_shareable(
+    PoolInput.new(:redis_pool, 20, RedisFactory.new(ENV.fetch('REDIS_URL')), 100)
+  )
+) do |input|
+  pool = Sidekiq::Ratomic::Pool.new(
+    pool_name: input.pool_name,
+    size: input.size,
+    factory: input.factory
+  )
+
+  input.jobs.times do
+    pool.with { |resource| resource.call('PING') }
+  end
+
+  pool.close
+  :complete
+end
+
+ractor.value
+```
+
+Threads created by the host inside that Ractor use the same Ractor-local pool.
+Resources must not be returned to, or used by, another Ractor. See the
+[`Ractor-local pooling implementation plan`](docs/ractor-local-pooling-implementation-plan.md)
+for the integration contract and rollout criteria.
 
 The circuit breaker uses `Ratomic::Counter` for its failure count. This keeps the
 counter aligned with Ratomic's Ractor-safe primitive model and avoids a separate

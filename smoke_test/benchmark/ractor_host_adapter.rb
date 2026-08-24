@@ -18,7 +18,7 @@ threads_per_ractor = Integer(ENV.fetch('RACTOR_NATIVE_THREADS', '20'))
 pool_size = Integer(ENV.fetch('RATOMIC_POOL_SIZE', '20'))
 jobs_per_ractor = Integer(ENV.fetch('BENCHMARK_JOBS_PER_RACTOR', '20'))
 
-ractors = ractor_count.times.map do |index|
+ractors = ractor_count.times.map do |index| # rubocop:disable Metrics/BlockLength
   input = Ractor.make_shareable(HostInput.new(index, threads_per_ractor, jobs_per_ractor, pool_size))
   Ractor.new(input) do |ractor_input|
     factory = HostFactory.new(ractor_input.index)
