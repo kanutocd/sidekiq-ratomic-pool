@@ -5,8 +5,11 @@ module Sidekiq
   # Ratomic-backed Sidekiq middleware namespace.
   module Ratomic
     class Pool
-      # Current gem version.
-      VERSION = '0.1.0'
+      # Base error for pool failures.
+      class Error < StandardError; end
+
+      # Raised when the circuit breaker is open.
+      class CircuitOpenError < Error; end
     end
   end
 end
