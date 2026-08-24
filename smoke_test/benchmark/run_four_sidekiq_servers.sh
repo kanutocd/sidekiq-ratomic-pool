@@ -49,6 +49,8 @@ if [[ "$redis_ready" != 'yes' ]]; then
   docker compose logs --no-color redis
   exit 1
 fi
+redis_version="$(docker compose exec -T redis redis-cli INFO server |
+  awk -F: '$1 == "redis_version" { gsub("\\r", "", $2); print $2; exit }')"
 
 for server_index in $(seq 1 "$server_count"); do
   server_log="$(mktemp -t sidekiq-ratomic-pool-server-${server_index}.XXXXXX.log)"
@@ -64,6 +66,7 @@ printf '\nCPU cores visible to the benchmark: '
 nproc 2>/dev/null || getconf _NPROCESSORS_ONLN
 printf 'Ruby: '; ruby -v
 bundle exec ruby -e 'require "sidekiq"; require "ratomic"; puts "Sidekiq: #{Sidekiq::VERSION}"; puts "Ratomic: #{Ratomic::VERSION}"'
+printf 'Redis: %s\n' "$redis_version"
 printf 'Run ID: %s\n' "$BENCHMARK_RUN_ID"
 printf 'Sidekiq servers: %s, concurrency per server: %s, pool size per server: %s, checkout timeout: %ss\n' \
   "$server_count" "$server_concurrency" "$pool_size" "$RATOMIC_POOL_TIMEOUT"

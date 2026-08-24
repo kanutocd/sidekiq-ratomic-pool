@@ -4,8 +4,6 @@
   throughput measurements using real Redis, Sidekiq, and Ratomic pooling.
 - Added configurable benchmark workloads with elapsed-time, jobs-per-second, and
   Sidekiq process/thread scheduling output.
-- Added an illustrative benchmark result, interpretation, and captured output
-  snapshot documenting the workload and its limitations.
 - Added a matched `connection_pool` comparison runner using the same Redis,
   Sidekiq, pooling, health-check, and workload settings.
 - Added a Ractor-native `4 × 20` benchmark and a four-process Sidekiq benchmark
@@ -24,11 +22,14 @@
 - Aligned native and four-process Sidekiq benchmark defaults for workload and
   checkout timeout, added runtime/version/topology metadata, and hardened short
   benchmark snapshot handling.
-- Added matched benchmark results and documented their interpretation
-  and comparison limitations.
 - Linked the benchmark from the smoke-test documentation.
 - Expanded YARD documentation for all public `Sidekiq::Ratomic::Pool` attribute
   readers and clarified the host-owned Ractor integration contract.
+- Added elapsed-time and jobs-per-second metrics to the host-owned Ractor
+  adapter for direct comparison with the Sidekiq benchmark.
+- Added Redis server version metadata to the real-Redis benchmark runners.
+- Converted the host-owned Ractor adapter to real Redis resources and persisted
+  a reproducible command for comparing its topology and throughput.
 
 ## [0.2.0] - 2026-08-25
 

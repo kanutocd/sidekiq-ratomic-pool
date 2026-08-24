@@ -116,23 +116,32 @@ Resources must not be returned to, or used by, another Ractor. See the
 [`Ractor-local pooling implementation plan`](docs/ractor-local-pooling-implementation-plan.md)
 for the integration contract and rollout criteria.
 
-The opt-in host adapter example demonstrates bounded dispatch and per-Ractor
-activity metrics without making Ractor scheduling part of the gem:
+The opt-in host adapter example demonstrates bounded dispatch, real Redis
+connections, and per-Ractor activity metrics without making Ractor scheduling
+part of the gem:
 
 ```bash
 cd smoke_test
-RACTOR_NATIVE_COUNT="$(nproc)" \
+docker compose up -d redis
+REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6380/0}" \
+RACTOR_NATIVE_COUNT=4 \
 RACTOR_NATIVE_THREADS=20 \
 RATOMIC_POOL_SIZE=20 \
 RATOMIC_POOL_TIMEOUT=1 \
 RACTOR_QUEUE_CAPACITY=40 \
-BENCHMARK_JOBS_PER_RACTOR=20 \
+BENCHMARK_JOBS_PER_RACTOR=5000 \
+BENCHMARK_WORK_SECONDS=0.05 \
 bundle exec ruby ./benchmark/ractor_host_adapter.rb
 ```
 
 The adapter defaults its Ractor count to `Etc.nprocessors` when the variable
 is omitted. That CPU-based default belongs to the example only; production
 applications remain responsible for choosing and supervising their topology.
+The adapter performs real Redis `PING`, `INCR`, and `HSET` operations and
+reports Ruby, Sidekiq, Ratomic, and Redis versions, elapsed time, throughput,
+and per-Ractor results. With four Ractors, the command above processes 20,000
+jobs and demonstrates four independent pools of 20 resources, shared by 20
+threads inside each Ractor.
 
 The circuit breaker uses `Ratomic::Counter` for its failure count. This keeps the
 counter aligned with Ratomic's Ractor-safe primitive model and avoids a separate

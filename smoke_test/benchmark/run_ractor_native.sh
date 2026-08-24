@@ -44,6 +44,8 @@ if [[ "$redis_ready" != 'yes' ]]; then
   docker compose logs --no-color redis
   exit 1
 fi
+redis_version="$(docker compose exec -T redis redis-cli INFO server |
+  awk -F: '$1 == "redis_version" { gsub("\\r", "", $2); print $2; exit }')"
 
 bundle exec ruby ./benchmark/ractor_native.rb >"$benchmark_log" 2>&1 &
 benchmark_pid=$!
@@ -52,6 +54,7 @@ printf '\nCPU cores visible to the benchmark: '
 nproc 2>/dev/null || getconf _NPROCESSORS_ONLN
 printf 'Ruby: '; ruby -v
 bundle exec ruby -e 'require "sidekiq"; require "ratomic"; puts "Sidekiq: #{Sidekiq::VERSION}"; puts "Ratomic: #{Ratomic::VERSION}"'
+printf 'Redis: %s\n' "$redis_version"
 printf 'Ractor benchmark PID: %s\n' "$benchmark_pid"
 printf 'Run ID: %s\n' "$BENCHMARK_RUN_ID"
 printf 'Ractors: %s, threads per Ractor: %s, pool size per Ractor: %s, checkout timeout: %ss\n' \
