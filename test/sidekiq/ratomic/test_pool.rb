@@ -211,6 +211,104 @@ module Sidekiq
         assert_equal 2, distinct_resources
       end
 
+      def test_ractor_local_health_failure_retries_and_recovers
+        factory = Ractor.make_shareable(RactorFactory.new(:health))
+        ractor = Ractor.new(factory) do |ractor_factory|
+          attempts = 0
+          validator = lambda do |_resource|
+            attempts += 1
+            attempts > 1
+          end
+          pool = Pool.new(pool_name: :redis_pool, max_retries: 1, retry_delay: 0,
+                          validator:, factory: ractor_factory)
+          result = pool.with { :ok }
+          [result, attempts, pool.state]
+        end
+
+        result, attempts, state = ractor.value
+
+        assert_equal :ok, result
+        assert_equal 2, attempts
+        assert_equal :closed, state
+      end
+
+      def test_ractor_local_circuit_opens_and_fast_fails
+        factory = Ractor.make_shareable(RactorFactory.new(:circuit))
+        ractor = Ractor.new(factory) do |ractor_factory|
+          pool = Pool.new(pool_name: :redis_pool, max_retries: 0, cb_threshold: 1,
+                          cb_timeout: 60, validator: ->(_resource) { false }, factory: ractor_factory)
+          first_error = begin
+            pool.with { :unreachable }
+          rescue StandardError => e
+            e.class.name
+          end
+          second_error = begin
+            pool.with { :unreachable }
+          rescue StandardError => e
+            e.class.name
+          end
+          [first_error, second_error, pool.state]
+        end
+
+        first_error, second_error, state = ractor.value
+
+        assert_equal 'Sidekiq::Ratomic::Pool::CheckoutError', first_error
+        assert_equal 'Sidekiq::Ratomic::Pool::CircuitOpenError', second_error
+        assert_equal :open, state
+      end
+
+      def test_ractor_local_half_open_probe_recovers_the_circuit
+        factory = Ractor.make_shareable(RactorFactory.new(:half_open))
+        ractor = Ractor.new(factory) do |ractor_factory|
+          attempts = 0
+          validator = lambda do |_resource|
+            attempts += 1
+            attempts > 1
+          end
+          pool = Pool.new(pool_name: :redis_pool, max_retries: 0, cb_threshold: 1,
+                          cb_timeout: 0, validator:, factory: ractor_factory)
+          first_error = begin
+            pool.with { :unreachable }
+          rescue StandardError => e
+            e.class.name
+          end
+          half_open_state = pool.state
+          result = pool.with { :recovered }
+          [first_error, half_open_state, result, pool.state]
+        end
+
+        first_error, half_open_state, result, final_state = ractor.value
+
+        assert_equal 'Sidekiq::Ratomic::Pool::CheckoutError', first_error
+        assert_equal :half_open, half_open_state
+        assert_equal :recovered, result
+        assert_equal :closed, final_state
+      end
+
+      def test_ractor_local_worker_failure_policy_is_preserved
+        factory = Ractor.make_shareable(RactorFactory.new(:worker_failure))
+        ractor = Ractor.new(factory) do |ractor_factory|
+          pool = Pool.new(pool_name: :redis_pool, max_retries: 1, retry_delay: 0,
+                          cb_threshold: 1, factory: ractor_factory)
+          attempts = 0
+          error_class = begin
+            pool.with do
+              attempts += 1
+              raise 'worker failure'
+            end
+          rescue StandardError => e
+            e.class.name
+          end
+          [error_class, attempts, pool.state]
+        end
+
+        error_class, attempts, state = ractor.value
+
+        assert_equal 'RuntimeError', error_class
+        assert_equal 1, attempts
+        assert_equal :closed, state
+      end
+
       def test_rejects_invalid_configuration
         invalid_options = [
           { size: 0 },
