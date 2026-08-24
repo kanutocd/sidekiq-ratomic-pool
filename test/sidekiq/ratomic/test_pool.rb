@@ -15,6 +15,16 @@ module Sidekiq
         end
       end
 
+      class NonShareableFactory
+        def initialize
+          @mutex = Mutex.new
+        end
+
+        def call
+          Object.new
+        end
+      end
+
       class Worker
         attr_accessor :redis_pool
       end
@@ -68,6 +78,14 @@ module Sidekiq
         assert_raises(ArgumentError) { Pool.new(factory: ResourceFactory.new.freeze) }
       end
 
+      def test_rejects_a_non_shareable_resource_factory
+        error = assert_raises(ArgumentError) do
+          Pool.new(pool_name: :redis_pool, factory: NonShareableFactory.new)
+        end
+
+        assert_match(/resource factory must be Ractor-shareable/, error.message)
+      end
+
       def test_accepts_sidekiq_style_positional_options
         validator = ->(_resource) { true }
         pool = Pool.new(
@@ -96,6 +114,10 @@ module Sidekiq
 
       def test_rejects_invalid_middleware_options
         assert_raises(ArgumentError) { Pool.new(Object.new) }
+
+        assert_raises(ArgumentError) do
+          Pool.new(pool_name: :redis_pool, factory: ResourceFactory.new.freeze, validator: Object.new)
+        end
 
         assert_raises(ArgumentError) do
           Pool.new({ pool_name: :redis_pool, factory: ResourceFactory.new.freeze, unknown: true })

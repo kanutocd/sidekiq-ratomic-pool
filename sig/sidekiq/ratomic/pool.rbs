@@ -52,6 +52,7 @@ module Sidekiq
       def record_success: () -> void
       def record_failure: () -> void
       def monotonic_time: () -> Float
+      def make_shareable_factory: (untyped) -> untyped
     end
   end
 end

@@ -52,7 +52,9 @@ module Sidekiq
         @failure_count = ::Ratomic::Counter.new
         @state_holder = { state: :closed, last_state_change: monotonic_time }
 
-        shareable_factory = Ractor.make_shareable(factory)
+        raise ArgumentError, 'validator must respond to call' unless validator.nil? || validator.respond_to?(:call)
+
+        shareable_factory = make_shareable_factory(factory)
         @local_pool = ::Ratomic::LocalPool.new(size: @size, factory: shareable_factory)
       end
 
@@ -221,6 +223,12 @@ module Sidekiq
 
       def monotonic_time
         Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      end
+
+      def make_shareable_factory(factory)
+        Ractor.make_shareable(factory)
+      rescue Ractor::Error, TypeError => e
+        raise ArgumentError, "resource factory must be Ractor-shareable: #{e.message}"
       end
     end
     # rubocop:enable Metrics/MethodLength

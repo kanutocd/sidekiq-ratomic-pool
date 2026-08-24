@@ -12,6 +12,10 @@
   demonstrating 80 total worker/resource capacity across independent runtimes.
 - Made the Ractor benchmark scalable for large job counts by using fixed worker
   threads with queued jobs instead of creating one Ruby thread per job.
+- Added explicit Ractor-shareability validation for resource factories with a
+  clear configuration error for unsupported factory state.
+- Added custom validator callability validation and regression coverage for the
+  new Ractor-boundary configuration checks.
 - Linked the benchmark from the smoke-test documentation.
 
 ## [0.2.0] - 2026-08-25
