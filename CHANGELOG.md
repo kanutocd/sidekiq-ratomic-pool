@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-26
+
 - Added a dedicated `smoke_test/benchmark/` harness for comparative end-to-end
   throughput measurements using real Redis, Sidekiq, and Ratomic pooling.
 - Added configurable benchmark workloads with elapsed-time, jobs-per-second, and
