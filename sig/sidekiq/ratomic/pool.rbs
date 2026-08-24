@@ -22,7 +22,8 @@ module Sidekiq
       attr_reader retryable_errors: Array[Class]
 
       def initialize: (
-        pool_name: Symbol | String,
+        ?untyped options,
+        ?pool_name: (Symbol | String),
         ?size: Integer,
         ?max_retries: Integer,
         ?retry_delay: Numeric,
@@ -34,12 +35,15 @@ module Sidekiq
       ) { () -> untyped } -> void
 
       def call: (untyped, untyped, untyped) { () -> untyped } -> untyped
+      def config=: (untyped) -> untyped
       def close: () -> nil
       def shutdown: () -> nil
       def with: () { (untyped) -> untyped } -> untyped
       def state: () -> Symbol
       private
       def validate_options!: (untyped, untyped, untyped, untyped, untyped) -> void
+      def normalize_options!: (untyped) { (Hash[Symbol, untyped]) -> void } -> void
+      def adopt_runtime: (instance) -> void
       def check_circuit_state!: () -> void
       def verify_health: (untyped) -> bool
       def retryable_error?: (StandardError) -> bool

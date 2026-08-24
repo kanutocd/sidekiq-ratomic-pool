@@ -68,6 +68,54 @@ module Sidekiq
 
       def test_requires_a_resource_factory
         assert_raises(ArgumentError) { Pool.new(pool_name: :redis_pool) }
+        assert_raises(ArgumentError) { Pool.new(factory: ResourceFactory.new.freeze) }
+      end
+
+      def test_accepts_sidekiq_style_positional_options
+        validator = ->(_resource) { true }
+        pool = Pool.new(
+          {
+            pool_name: :positional_pool,
+            size: 2,
+            max_retries: 1,
+            retry_delay: 0,
+            cb_threshold: 2,
+            cb_timeout: 1,
+            validator:,
+            retryable_errors: [IOError],
+            factory: ResourceFactory.new.freeze
+          }
+        )
+
+        assert_equal :positional_pool, pool.pool_name
+        assert_equal 2, pool.size
+        assert_equal 1, pool.max_retries
+        assert_equal 0, pool.retry_delay
+        assert_equal 2, pool.cb_threshold
+        assert_equal 1, pool.cb_timeout
+        assert_same validator, pool.validator
+        assert_equal [IOError], pool.retryable_errors
+      end
+
+      def test_rejects_invalid_middleware_options
+        assert_raises(ArgumentError) { Pool.new(Object.new) }
+
+        assert_raises(ArgumentError) do
+          Pool.new({ pool_name: :redis_pool, factory: ResourceFactory.new.freeze, unknown: true })
+        end
+      end
+
+      def test_config_shares_runtime_across_middleware_instances
+        config = Object.new
+        first = Pool.new(pool_name: :redis_pool, factory: ResourceFactory.new.freeze)
+        second = Pool.new({ pool_name: :redis_pool, factory: ResourceFactory.new.freeze })
+
+        assert_same config, (first.config = config)
+        assert_same config, (second.config = config)
+        assert_same first.instance_variable_get(:@local_pool), second.instance_variable_get(:@local_pool)
+        assert_same first.instance_variable_get(:@state_mutex), second.instance_variable_get(:@state_mutex)
+        assert_same first.instance_variable_get(:@failure_count), second.instance_variable_get(:@failure_count)
+        assert_same first.instance_variable_get(:@state_holder), second.instance_variable_get(:@state_holder)
       end
 
       def test_rejects_invalid_configuration

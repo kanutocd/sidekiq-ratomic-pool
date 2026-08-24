@@ -13,14 +13,29 @@ module Sidekiq
     #
     # Resources are validated before checkout and transient failures are retried
     # with exponential backoff. Persistent failures open the circuit breaker.
+    # rubocop:disable Metrics/ClassLength
     class Pool
       attr_reader :pool_name, :size, :max_retries, :retry_delay, :validator, :cb_threshold, :cb_timeout,
                   :retryable_errors
 
-      def initialize(pool_name:, size: 10, max_retries: 3, retry_delay: 0.2,
+      # rubocop:disable Metrics/MethodLength
+      def initialize(options = nil, pool_name: nil, size: 10, max_retries: 3, retry_delay: 0.2,
                      cb_threshold: 5, cb_timeout: 30, validator: nil,
                      retryable_errors: [IOError, SystemCallError, Timeout::Error], factory: nil, &block)
+        normalize_options!(options) do |config|
+          pool_name = config.fetch(:pool_name, pool_name)
+          size = config.fetch(:size, size)
+          max_retries = config.fetch(:max_retries, max_retries)
+          retry_delay = config.fetch(:retry_delay, retry_delay)
+          cb_threshold = config.fetch(:cb_threshold, cb_threshold)
+          cb_timeout = config.fetch(:cb_timeout, cb_timeout)
+          validator = config.fetch(:validator, validator)
+          retryable_errors = config.fetch(:retryable_errors, retryable_errors)
+          factory = config.fetch(:factory, factory)
+        end
+
         factory ||= block
+        raise ArgumentError, 'A pool_name must be provided' unless pool_name
         raise ArgumentError, 'A resource factory must be provided' unless factory
 
         validate_options!(size, max_retries, retry_delay, cb_threshold, cb_timeout)
@@ -35,11 +50,35 @@ module Sidekiq
         @retryable_errors = retryable_errors.freeze
         @state_mutex = Mutex.new
         @failure_count = ::Ratomic::Counter.new
-        @state = :closed
-        @last_state_change = monotonic_time
+        @state_holder = { state: :closed, last_state_change: monotonic_time }
 
         shareable_factory = Ractor.make_shareable(factory)
         @local_pool = ::Ratomic::LocalPool.new(size: @size, factory: shareable_factory)
+      end
+
+      # Share one pool runtime across Sidekiq's per-job middleware instances.
+      def config=(config)
+        mutex = config.instance_variable_get(:@sidekiq_ratomic_pool_mutex)
+        unless mutex
+          mutex = Mutex.new
+          config.instance_variable_set(:@sidekiq_ratomic_pool_mutex, mutex)
+        end
+
+        runtimes = config.instance_variable_get(:@sidekiq_ratomic_pool_runtimes)
+        unless runtimes
+          runtimes = {} # : Hash[Symbol, Pool]
+          config.instance_variable_set(:@sidekiq_ratomic_pool_runtimes, runtimes)
+        end
+
+        mutex.synchronize do
+          runtime = runtimes[@pool_name]
+          if runtime
+            adopt_runtime(runtime)
+          else
+            runtimes[@pool_name] = self
+          end
+        end
+        @config = config
       end
 
       # Inject this pool into a worker's configured pool accessor.
@@ -93,11 +132,11 @@ module Sidekiq
       # Return the current circuit-breaker state.
       def state
         @state_mutex.synchronize do
-          if @state == :open && monotonic_time - @last_state_change > @cb_timeout
-            @state = :half_open
-            @last_state_change = monotonic_time
+          if @state_holder[:state] == :open && monotonic_time - @state_holder[:last_state_change] > @cb_timeout
+            @state_holder[:state] = :half_open
+            @state_holder[:last_state_change] = monotonic_time
           end
-          @state
+          @state_holder[:state]
         end
       end
 
@@ -136,6 +175,25 @@ module Sidekiq
         end
       end
 
+      def normalize_options!(options)
+        return unless options
+        raise ArgumentError, 'middleware options must be a Hash' unless options.is_a?(Hash)
+
+        config = options.transform_keys(&:to_sym)
+        allowed = %i[pool_name size max_retries retry_delay cb_threshold cb_timeout validator retryable_errors factory]
+        unknown = config.keys - allowed
+        raise ArgumentError, "unknown middleware options: #{unknown.join(', ')}" unless unknown.empty?
+
+        yield config
+      end
+
+      def adopt_runtime(runtime)
+        @local_pool = runtime.instance_variable_get(:@local_pool)
+        @state_mutex = runtime.instance_variable_get(:@state_mutex)
+        @failure_count = runtime.instance_variable_get(:@failure_count)
+        @state_holder = runtime.instance_variable_get(:@state_holder)
+      end
+
       def default_validator(resource)
         return resource.ping if resource.respond_to?(:ping)
         return resource.active? if resource.respond_to?(:active?)
@@ -147,16 +205,16 @@ module Sidekiq
         @state_mutex.synchronize do
           failure_count = @failure_count.value
           @failure_count.decrement(failure_count) unless failure_count.zero?
-          @state = :closed if @state == :half_open
+          @state_holder[:state] = :closed if @state_holder[:state] == :half_open
         end
       end
 
       def record_failure
         @state_mutex.synchronize do
           @failure_count.increment(1)
-          if @failure_count.value >= @cb_threshold || @state == :half_open
-            @state = :open
-            @last_state_change = monotonic_time
+          if @failure_count.value >= @cb_threshold || @state_holder[:state] == :half_open
+            @state_holder[:state] = :open
+            @state_holder[:last_state_change] = monotonic_time
           end
         end
       end
@@ -165,5 +223,7 @@ module Sidekiq
         Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end
     end
+    # rubocop:enable Metrics/MethodLength
+    # rubocop:enable Metrics/ClassLength
   end
 end

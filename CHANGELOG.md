@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+- Added a real Redis-backed `smoke_test/` harness with standalone Sidekiq client
+  and server examples, Docker Compose Redis, and process/thread scheduling output.
+- Made the middleware compatible with Sidekiq's per-job middleware instantiation
+  by sharing each configured pool runtime across middleware instances.
+- Added support for Sidekiq-style positional middleware options and validation for
+  unknown options.
+- Added smoke coverage for multi-threaded job processing across visible CPUs.
+
+## [0.1.0] - 2026-08-24
+
 - Added Sidekiq middleware with Ratomic `LocalPool` resource injection,
   health validation, exponential retries, and circuit-breaker fast failure.
 - Added thread-boundary pool behavior tests and synchronized RBS signatures for the
