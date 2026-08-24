@@ -48,3 +48,14 @@ not add Sidekiq or Redis as production dependencies of `sidekiq-ratomic-pool`.
 The harness uses host port `6380` by default to avoid colliding with a local
 Redis on port `6379`; override it with `REDIS_PORT` or provide a complete
 `REDIS_URL`.
+
+## Benchmark
+
+For comparative throughput measurements, see [`benchmark/`](benchmark/). It
+uses the same real Redis and Sidekiq setup but reports end-to-end elapsed time
+and jobs per second:
+
+```bash
+cd smoke_test/benchmark
+./run.sh
+```

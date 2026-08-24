@@ -32,6 +32,7 @@ and worker pool accessor pattern.
 - **Exponential Backoff**: Applies increasing retry delays to transient checkout and retryable resource-operation failures.
 - **Automated Health Probes**: Validates resources with `ping`, `active?`, or a caller-supplied validator before use.
 - **Configurable Failure Policy**: Non-retryable worker exceptions propagate without changing circuit state, avoiding accidental duplicate work.
+- **Ratomic-Native Failure Accounting**: Tracks circuit-breaker failures with the Ractor-shareable `Ratomic::Counter` primitive instead of adding `concurrent-ruby`.
 
 ## Usage
 
@@ -69,6 +70,11 @@ Resource checkout/health failures and configured retryable I/O errors use expone
 Other exceptions raised by the worker block propagate without being retried, preventing
 accidental duplication of non-idempotent work.
 
+The circuit breaker uses `Ratomic::Counter` for its failure count. This keeps the
+counter aligned with Ratomic's Ractor-safe primitive model and avoids a separate
+`concurrent-ruby` production dependency; the pool mutex still protects the
+failure-count and circuit-state transition as one operation.
+
 ## Smoke test
 
 The [`smoke_test/`](smoke_test/) harness runs Redis in Docker, starts a standalone
@@ -80,3 +86,6 @@ Sidekiq worker threads and the CPU core (`PSR`) on which they were recently sche
 cd smoke_test
 ./run.sh
 ```
+
+For comparative throughput measurements, see the [`smoke_test/benchmark/`](smoke_test/benchmark/)
+harness.
