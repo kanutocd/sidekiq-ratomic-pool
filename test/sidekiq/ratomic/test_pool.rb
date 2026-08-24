@@ -288,6 +288,141 @@ module Sidekiq
         assert_equal :closed, final_state
       end
 
+      def test_half_open_allows_only_one_concurrent_probe
+        attempts = 0
+        probe_started = Queue.new
+        release_probe = Queue.new
+        validator = lambda do |_resource|
+          attempts += 1
+          if attempts == 2
+            probe_started << true
+            release_probe.pop
+          end
+          attempts > 1
+        end
+        pool = Pool.new(pool_name: :redis_pool, max_retries: 0, cb_threshold: 1,
+                        cb_timeout: 0, validator:, factory: ResourceFactory.new.freeze)
+
+        begin
+          assert_raises(Pool::CheckoutError) { pool.with { :unreachable } }
+          pool.state
+          threads = 8.times.map do
+            Thread.new do
+              pool.with { :recovered }
+            rescue StandardError => e
+              e.class.name
+            end
+          end
+          probe_started.pop
+          sleep 0.01
+          release_probe << true
+          results = threads.map(&:value)
+
+          assert_equal 2, attempts
+          assert_equal 1, results.count(:recovered)
+          assert_equal 7, results.count('Sidekiq::Ratomic::Pool::CircuitOpenError')
+          assert_equal :closed, pool.state
+        ensure
+          pool.close
+        end
+      end
+
+      def test_half_open_probe_lease_releases_after_non_retryable_worker_failure
+        attempts = 0
+        validator = lambda do |_resource|
+          attempts += 1
+          attempts > 1
+        end
+        pool = Pool.new(pool_name: :redis_pool, max_retries: 0, cb_threshold: 1,
+                        cb_timeout: 0, validator:, factory: ResourceFactory.new.freeze)
+
+        begin
+          assert_raises(Pool::CheckoutError) { pool.with { :unreachable } }
+          pool.state
+          assert_raises(RuntimeError) { pool.with { raise 'worker failure' } }
+          assert_equal :half_open, pool.state
+          recovered = pool.with { :recovered }
+
+          assert_equal :recovered, recovered
+          assert_equal :closed, pool.state
+        ensure
+          pool.close
+        end
+      end
+
+      def test_host_coordinates_cancellation_when_a_ractor_fails
+        parent = Ractor.current
+        factory = Ractor.make_shareable(RactorFactory.new(:cancellation))
+        ractors = 2.times.map do |index|
+          Ractor.new(index, factory, parent) do |ractor_index, ractor_factory, host|
+            cancelled = false
+            cancellation = Thread.new do
+              Ractor.receive
+              cancelled = true
+            end
+            pool = Pool.new(pool_name: :redis_pool, factory: ractor_factory)
+
+            if ractor_index.zero?
+              begin
+                pool.with { raise 'ractor failure' }
+              rescue RuntimeError => e
+                host.send([:failed, ractor_index, e.message])
+              end
+            else
+              sleep 0.001 until cancelled
+            end
+
+            cancellation.join
+            pool.close
+            [ractor_index, cancelled]
+          end
+        end
+
+        failure = Ractor.receive
+        ractors.each { |ractor| ractor.send(:cancel) }
+        results = ractors.map(&:value)
+
+        assert_equal [:failed, 0, 'ractor failure'], failure
+        assert_equal [[0, true], [1, true]], results.sort
+      end
+
+      def test_simultaneous_failures_remain_isolated_across_ractors
+        factory = Ractor.make_shareable(RactorFactory.new(:failure_stress))
+        ractors = 4.times.map do |index|
+          Ractor.new(index, factory) do |ractor_index, ractor_factory|
+            pool = Pool.new(pool_name: :redis_pool, size: 8, max_retries: 0, cb_threshold: 1,
+                            cb_timeout: 60, validator: lambda do |_resource|
+                              sleep 0.001
+                              false
+                            end,
+                            factory: ractor_factory)
+            start = Queue.new
+            threads = 8.times.map do
+              Thread.new do
+                start.pop
+                pool.with { :unreachable }
+              rescue StandardError => e
+                e.class.name
+              end
+            end
+            8.times { start << true }
+            results = threads.map(&:value)
+            state = pool.state
+            pool.close
+            [ractor_index, results, state]
+          end
+        end
+
+        results = ractors.map(&:value)
+
+        assert_equal [0, 1, 2, 3], results.map(&:first)
+        results.each do |_index, errors, state|
+          assert_equal 8, errors.size
+          assert(errors.all? { |error| error.end_with?('CheckoutError', 'CircuitOpenError') })
+          assert_equal :open, state
+        end
+      end
+
       def test_ractor_local_worker_failure_policy_is_preserved
         factory = Ractor.make_shareable(RactorFactory.new(:worker_failure))
         ractor = Ractor.new(factory) do |ractor_factory|

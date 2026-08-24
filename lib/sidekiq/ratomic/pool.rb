@@ -87,7 +87,7 @@ module Sidekiq
         @retryable_errors = retryable_errors.freeze
         @state_mutex = Mutex.new
         @failure_count = ::Ratomic::Counter.new
-        @state_holder = { state: :closed, last_state_change: monotonic_time }
+        @state_holder = { state: :closed, last_state_change: monotonic_time, probe_in_flight: false }
 
         raise ArgumentError, 'validator must respond to call' unless validator.nil? || validator.respond_to?(:call)
 
@@ -136,7 +136,7 @@ module Sidekiq
 
       # Check out a healthy resource and yield it to the caller.
       def with
-        check_circuit_state!
+        probe_reserved = check_circuit_state!
         attempts = 0
         work_failed = false
 
@@ -155,7 +155,10 @@ module Sidekiq
             result
           end
         rescue StandardError => e
-          raise unless !work_failed || retryable_error?(e)
+          unless !work_failed || retryable_error?(e)
+            release_half_open_probe if probe_reserved
+            raise
+          end
 
           record_failure
           if attempts <= @max_retries && state != :open
@@ -171,10 +174,7 @@ module Sidekiq
       # Return the current circuit-breaker state.
       def state
         @state_mutex.synchronize do
-          if @state_holder[:state] == :open && monotonic_time - @state_holder[:last_state_change] > @cb_timeout
-            @state_holder[:state] = :half_open
-            @state_holder[:last_state_change] = monotonic_time
-          end
+          transition_to_half_open_if_ready
           @state_holder[:state]
         end
       end
@@ -182,9 +182,20 @@ module Sidekiq
       private
 
       def check_circuit_state!
-        return unless state == :open
+        @state_mutex.synchronize do
+          transition_to_half_open_if_ready
+          case @state_holder[:state]
+          when :open
+            raise Pool::CircuitOpenError, 'Circuit breaker is open'
+          when :half_open
+            raise Pool::CircuitOpenError, 'Circuit breaker probe is in flight' if @state_holder[:probe_in_flight]
 
-        raise Pool::CircuitOpenError, 'Circuit breaker is open'
+            @state_holder[:probe_in_flight] = true
+            true
+          else
+            false
+          end
+        end
       end
 
       def verify_health(resource)
@@ -248,7 +259,10 @@ module Sidekiq
         @state_mutex.synchronize do
           failure_count = @failure_count.value
           @failure_count.decrement(failure_count) unless failure_count.zero?
-          @state_holder[:state] = :closed if @state_holder[:state] == :half_open
+          if @state_holder[:state] == :half_open
+            @state_holder[:state] = :closed
+            @state_holder[:probe_in_flight] = false
+          end
         end
       end
 
@@ -258,8 +272,24 @@ module Sidekiq
           if @failure_count.value >= @cb_threshold || @state_holder[:state] == :half_open
             @state_holder[:state] = :open
             @state_holder[:last_state_change] = monotonic_time
+            @state_holder[:probe_in_flight] = false
           end
         end
+      end
+
+      def release_half_open_probe
+        @state_mutex.synchronize do
+          @state_holder[:probe_in_flight] = false
+        end
+      end
+
+      def transition_to_half_open_if_ready
+        return unless @state_holder[:state] == :open
+        return unless monotonic_time - @state_holder[:last_state_change] > @cb_timeout
+
+        @state_holder[:state] = :half_open
+        @state_holder[:last_state_change] = monotonic_time
+        @state_holder[:probe_in_flight] = false
       end
 
       def monotonic_time

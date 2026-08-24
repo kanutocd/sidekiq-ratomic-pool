@@ -60,6 +60,8 @@ module Sidekiq
       def default_validator: (untyped) -> bool
       def record_success: () -> void
       def record_failure: () -> void
+      def release_half_open_probe: () -> void
+      def transition_to_half_open_if_ready: () -> void
       def monotonic_time: () -> Float
       def make_shareable_factory: (untyped) -> untyped
     end

@@ -30,6 +30,10 @@
 - Added Redis server version metadata to the real-Redis benchmark runners.
 - Converted the host-owned Ractor adapter to real Redis resources and persisted
   a reproducible command for comparing its topology and throughput.
+- Enforced a single in-flight half-open circuit probe with concurrent fast
+  failure for competing callers.
+- Added regression coverage for host-coordinated Ractor cancellation and
+  simultaneous failure isolation across multiple Ractors.
 
 ## [0.2.0] - 2026-08-25
 
