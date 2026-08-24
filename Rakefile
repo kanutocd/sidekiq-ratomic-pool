@@ -36,7 +36,7 @@ namespace :yard do
 
     coverage = match[1].to_f
     minimum = 95.0
-    abort(format('YARD coverage %<coverage> is below %<minimum>', { coverage:, minimum: })) if coverage < minimum
+    abort(format('YARD coverage %<coverage>.2f%% is below %<minimum>.2f%%', coverage:, minimum:)) if coverage < minimum
 
     puts format('YARD coverage %.2f%%', coverage)
   end
@@ -48,3 +48,6 @@ task :steep_check do
 end
 
 task default: %i[test rubocop steep_check yard yard:validate]
+
+desc 'Run the complete quality gate'
+task quality: %i[test rubocop steep_check yard:validate]
