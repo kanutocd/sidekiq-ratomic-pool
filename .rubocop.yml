@@ -5,3 +5,26 @@ plugins:
 AllCops:
   NewCops: enable
   TargetRubyVersion: 4.0
+
+Metrics/ParameterLists:
+  CountKeywordArgs: false
+
+Metrics/ClassLength:
+  Max: 125
+
+Metrics/MethodLength:
+  Max: 26
+  Exclude:
+    - "test/**/*"
+
+Metrics/CyclomaticComplexity:
+  Max: 10
+
+Metrics/AbcSize:
+  Enabled: true
+  Max: 55
+  Exclude:
+    - "test/**/*"
+
+Metrics/PerceivedComplexity:
+  Max: 10
