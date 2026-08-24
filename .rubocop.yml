@@ -11,6 +11,8 @@ Metrics/ParameterLists:
 
 Metrics/ClassLength:
   Max: 125
+  Exclude:
+    - "test/**/*"
 
 Metrics/MethodLength:
   Max: 26

@@ -4,7 +4,6 @@ require 'test_helper'
 
 module Sidekiq
   module Ratomic
-    # rubocop:disable Metrics/ClassLength
     class TestPool < Minitest::Test
       def test_that_it_has_a_version_number
         refute_nil ::Sidekiq::Ratomic::Pool::VERSION
@@ -20,13 +19,11 @@ module Sidekiq
         attr_accessor :redis_pool
       end
 
-      # rubocop:disable Naming/PredicateMethod
       class PingResource
-        def ping
+        def ping # rubocop:disable Naming/PredicateMethod
           true
         end
       end
-      # rubocop:enable Naming/PredicateMethod
 
       class ActiveResource
         def active?
@@ -285,6 +282,5 @@ module Sidekiq
         assert_equal resources.size, resources.uniq.size
       end
     end
-    # rubocop:enable Metrics/ClassLength
   end
 end
