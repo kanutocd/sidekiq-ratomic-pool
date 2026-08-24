@@ -24,7 +24,10 @@ export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:${REDIS_PORT}/0}"
 export RACTOR_NATIVE_COUNT="${RACTOR_NATIVE_COUNT:-4}"
 export RACTOR_NATIVE_THREADS="${RACTOR_NATIVE_THREADS:-20}"
 export RATOMIC_POOL_SIZE="${RATOMIC_POOL_SIZE:-20}"
+export RATOMIC_POOL_TIMEOUT="${RATOMIC_POOL_TIMEOUT:-1}"
+export BENCHMARK_WORK_SECONDS="${BENCHMARK_WORK_SECONDS:-0.05}"
 export BENCHMARK_JOB_COUNT="${BENCHMARK_JOB_COUNT:-$((RACTOR_NATIVE_COUNT * RACTOR_NATIVE_THREADS))}"
+export BENCHMARK_RUN_ID="${BENCHMARK_RUN_ID:-$(date +%s%N)}"
 
 bundle check >/dev/null 2>&1 || bundle install
 docker compose up -d redis
@@ -47,14 +50,18 @@ benchmark_pid=$!
 
 printf '\nCPU cores visible to the benchmark: '
 nproc 2>/dev/null || getconf _NPROCESSORS_ONLN
+printf 'Ruby: '; ruby -v
+bundle exec ruby -e 'require "sidekiq"; require "ratomic"; puts "Sidekiq: #{Sidekiq::VERSION}"; puts "Ratomic: #{Ratomic::VERSION}"'
 printf 'Ractor benchmark PID: %s\n' "$benchmark_pid"
-printf 'Ractors: %s, threads per Ractor: %s, pool size per Ractor: %s\n' \
-  "$RACTOR_NATIVE_COUNT" "$RACTOR_NATIVE_THREADS" "$RATOMIC_POOL_SIZE"
+printf 'Run ID: %s\n' "$BENCHMARK_RUN_ID"
+printf 'Ractors: %s, threads per Ractor: %s, pool size per Ractor: %s, checkout timeout: %ss\n' \
+  "$RACTOR_NATIVE_COUNT" "$RACTOR_NATIVE_THREADS" "$RATOMIC_POOL_SIZE" "$RATOMIC_POOL_TIMEOUT"
+printf 'Jobs: %s, work per job: %ss\n' "$BENCHMARK_JOB_COUNT" "$BENCHMARK_WORK_SECONDS"
 
 while kill -0 "$benchmark_pid" 2>/dev/null; do
   printf '\n[%s] Ractor benchmark process/thread snapshot\n' "$(date '+%H:%M:%S')"
   ps -L -o pid,tid,psr,pcpu,nlwp,stat,comm -p "$benchmark_pid" 2>/dev/null || \
-    ps -o pid,psr,pcpu,nlwp,stat,comm -p "$benchmark_pid"
+    ps -o pid,psr,pcpu,nlwp,stat,comm -p "$benchmark_pid" 2>/dev/null || true
   sleep 1
 done
 

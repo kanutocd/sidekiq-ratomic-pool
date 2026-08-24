@@ -21,6 +21,7 @@ Sidekiq.configure_server do |config|
       Sidekiq::Ratomic::Pool,
       pool_name: :redis_pool,
       size: Integer(ENV.fetch('RATOMIC_POOL_SIZE', '4')),
+      pool_timeout: Float(ENV.fetch('RATOMIC_POOL_TIMEOUT', '1')),
       max_retries: 3,
       retry_delay: 0.05,
       cb_threshold: 5,

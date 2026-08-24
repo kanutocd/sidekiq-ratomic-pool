@@ -13,8 +13,8 @@ RactorInput = Data.define(:pool, :jobs, :threads, :work_seconds, :count_key, :re
 ractor_count = Integer(ENV.fetch('RACTOR_NATIVE_COUNT', '4'))
 threads_per_ractor = Integer(ENV.fetch('RACTOR_NATIVE_THREADS', '20'))
 pool_size = Integer(ENV.fetch('RATOMIC_POOL_SIZE', '20'))
-pool_timeout = Float(ENV.fetch('RATOMIC_POOL_TIMEOUT', '10'))
-work_seconds = Float(ENV.fetch('BENCHMARK_WORK_SECONDS', '0.1'))
+pool_timeout = Float(ENV.fetch('RATOMIC_POOL_TIMEOUT', '1'))
+work_seconds = Float(ENV.fetch('BENCHMARK_WORK_SECONDS', '0.05'))
 job_count = Integer(ENV.fetch('BENCHMARK_JOB_COUNT', (ractor_count * threads_per_ractor).to_s))
 
 redis_url = ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0').freeze

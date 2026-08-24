@@ -21,6 +21,11 @@
 - Expanded the host-owned Ractor adapter with CPU-based defaults, bounded job
   queues, configurable topology/workload controls, per-Ractor activity metrics,
   and controlled failure cancellation/reporting.
+- Aligned native and four-process Sidekiq benchmark defaults for workload and
+  checkout timeout, added runtime/version/topology metadata, and hardened short
+  benchmark snapshot handling.
+- Added matched benchmark results and documented their interpretation
+  and comparison limitations.
 - Linked the benchmark from the smoke-test documentation.
 
 ## [0.2.0] - 2026-08-25

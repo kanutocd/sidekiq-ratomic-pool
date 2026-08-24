@@ -27,8 +27,8 @@ BENCHMARK_JOB_COUNT=1000 BENCHMARK_CONCURRENCY=8 ./run.sh
 BENCHMARK_JOB_COUNT=1000 BENCHMARK_WORK_SECONDS=0.05 ./run.sh
 ```
 
-`REDIS_PORT`, `REDIS_URL`, `RATOMIC_POOL_SIZE`, and `KEEP_REDIS=1` have the same
-meaning as in the parent smoke-test harness.
+`REDIS_PORT`, `REDIS_URL`, `RATOMIC_POOL_SIZE`, `RATOMIC_POOL_TIMEOUT`, and
+`KEEP_REDIS=1` have the same meaning as in the parent smoke-test harness.
 
 ## `connection_pool` comparison
 
@@ -64,7 +64,8 @@ Ractor share that Ractor's local pool; resources are not shared across Ractors.
 Each Ractor uses a fixed worker-thread count and queues additional jobs, so a
 large `BENCHMARK_JOB_COUNT` does not create one Ruby thread per job. The local
 checkout timeout is configurable with `RATOMIC_POOL_TIMEOUT` and defaults to
-10 seconds for this benchmark.
+1 second. The default simulated work is `BENCHMARK_WORK_SECONDS=0.05`, matching
+the Sidekiq worker benchmark.
 
 ## Four independent Sidekiq servers
 
@@ -76,7 +77,9 @@ cd smoke_test/benchmark
 SIDEKIQ_SERVER_COUNT=4 \
 BENCHMARK_CONCURRENCY=20 \
 RATOMIC_POOL_SIZE=20 \
-BENCHMARK_JOB_COUNT=400 \ # or add BENCHMARK_WORK_SECONDS=0.1 
+RATOMIC_POOL_TIMEOUT=1 \
+BENCHMARK_WORK_SECONDS=0.05 \
+BENCHMARK_JOB_COUNT=400 \
 ./run_four_sidekiq_servers.sh
 ```
 
@@ -84,6 +87,14 @@ The runner reports 80 total worker threads and 80 total pool capacity. Each
 process owns its own middleware runtime and Ractor-local pool. Operating-system
 scheduling still determines which CPU runs each thread; the four processes do
 not imply one process is permanently pinned to one CPU core.
+
+Both runners print the CPU count, Ruby, Sidekiq, Ratomic, run ID, topology,
+checkout timeout, workload, elapsed time, and throughput. For repeatable
+comparisons, run each command multiple times with the same explicit environment
+and compare the median or the full set of results. The native benchmark measures
+direct Redis work inside host-owned Ractors; the Sidekiq benchmark additionally
+includes queue polling, job fetch, middleware, acknowledgment, and server
+lifecycle overhead.
 
 An illustrative result snapshot, interpretation, and captured output are
 available in [`results/2026-08-24.md`](results/2026-08-24.md).

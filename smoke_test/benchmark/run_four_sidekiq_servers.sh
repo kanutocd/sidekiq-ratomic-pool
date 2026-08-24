@@ -30,6 +30,9 @@ trap cleanup EXIT INT TERM
 
 export REDIS_PORT="${REDIS_PORT:-6380}"
 export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:${REDIS_PORT}/0}"
+export RATOMIC_POOL_TIMEOUT="${RATOMIC_POOL_TIMEOUT:-1}"
+export BENCHMARK_WORK_SECONDS="${BENCHMARK_WORK_SECONDS:-0.05}"
+export BENCHMARK_RUN_ID="${BENCHMARK_RUN_ID:-$(date +%s%N)}"
 
 bundle check >/dev/null 2>&1 || bundle install
 docker compose up -d redis
@@ -59,10 +62,14 @@ sleep 1
 
 printf '\nCPU cores visible to the benchmark: '
 nproc 2>/dev/null || getconf _NPROCESSORS_ONLN
-printf 'Sidekiq servers: %s, concurrency per server: %s, pool size per server: %s\n' \
-  "$server_count" "$server_concurrency" "$pool_size"
+printf 'Ruby: '; ruby -v
+bundle exec ruby -e 'require "sidekiq"; require "ratomic"; puts "Sidekiq: #{Sidekiq::VERSION}"; puts "Ratomic: #{Ratomic::VERSION}"'
+printf 'Run ID: %s\n' "$BENCHMARK_RUN_ID"
+printf 'Sidekiq servers: %s, concurrency per server: %s, pool size per server: %s, checkout timeout: %ss\n' \
+  "$server_count" "$server_concurrency" "$pool_size" "$RATOMIC_POOL_TIMEOUT"
 printf 'Total worker threads: %s, total pool capacity: %s\n' \
   "$((server_count * server_concurrency))" "$((server_count * pool_size))"
+printf 'Jobs: %s, work per job: %ss\n' "${BENCHMARK_JOB_COUNT:-100}" "$BENCHMARK_WORK_SECONDS"
 
 bundle exec ruby ./benchmark/client.rb >"$client_log" 2>&1 &
 client_pid=$!
@@ -71,7 +78,7 @@ while kill -0 "$client_pid" 2>/dev/null; do
   printf '\n[%s] Sidekiq process/thread snapshots\n' "$(date '+%H:%M:%S')"
   for server_pid in "${server_pids[@]}"; do
     ps -L -o pid,tid,psr,pcpu,nlwp,stat,comm -p "$server_pid" 2>/dev/null || \
-      ps -o pid,psr,pcpu,nlwp,stat,comm -p "$server_pid"
+      ps -o pid,psr,pcpu,nlwp,stat,comm -p "$server_pid" 2>/dev/null || true
   done
   sleep 1
 done
