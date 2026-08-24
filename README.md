@@ -63,10 +63,21 @@ Sidekiq.configure_server do |config|
 end
 ```
 
-Workers use the injected pool with `with`:
+The middleware injects the pool into a worker accessor matching `pool_name`.
+For example, a Redis-backed worker can use `redis_pool.with` inside `perform`:
 
 ```ruby
-redis_pool.with { |redis| redis.call('PING') }
+class RedisWorker
+  include Sidekiq::Job
+
+  attr_accessor :redis_pool
+
+  def perform(key, value)
+    redis_pool.with do |redis|
+      redis.call('SET', key, value)
+    end
+  end
+end
 ```
 
 Resource checkout/health failures and configured retryable I/O errors use exponential backoff.
