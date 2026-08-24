@@ -14,6 +14,7 @@ module Sidekiq
 
       attr_reader pool_name: Symbol
       attr_reader size: Integer
+      attr_reader pool_timeout: Numeric?
       attr_reader max_retries: Integer
       attr_reader retry_delay: untyped
       attr_reader validator: ^(untyped) -> bool
@@ -25,6 +26,7 @@ module Sidekiq
         ?untyped options,
         ?pool_name: (Symbol | String),
         ?size: Integer,
+        ?pool_timeout: Numeric?,
         ?max_retries: Integer,
         ?retry_delay: Numeric,
         ?cb_threshold: Integer,
@@ -41,7 +43,14 @@ module Sidekiq
       def with: () { (untyped) -> untyped } -> untyped
       def state: () -> Symbol
       private
-      def validate_options!: (untyped, untyped, untyped, untyped, untyped) -> void
+      def validate_options!: (
+        size: untyped,
+        pool_timeout: untyped,
+        max_retries: untyped,
+        retry_delay: untyped,
+        cb_threshold: untyped,
+        cb_timeout: untyped
+      ) -> void
       def normalize_options!: (untyped) { (Hash[Symbol, untyped]) -> void } -> void
       def adopt_runtime: (instance) -> void
       def check_circuit_state!: () -> void

@@ -100,6 +100,7 @@ module Sidekiq
           {
             pool_name: :positional_pool,
             size: 2,
+            pool_timeout: 2,
             max_retries: 1,
             retry_delay: 0,
             cb_threshold: 2,
@@ -112,6 +113,7 @@ module Sidekiq
 
         assert_equal :positional_pool, pool.pool_name
         assert_equal 2, pool.size
+        assert_equal 2, pool.pool_timeout
         assert_equal 1, pool.max_retries
         assert_equal 0, pool.retry_delay
         assert_equal 2, pool.cb_threshold
@@ -134,12 +136,13 @@ module Sidekiq
 
       def test_config_shares_runtime_across_middleware_instances
         config = Object.new
-        first = Pool.new(pool_name: :redis_pool, factory: ResourceFactory.new.freeze)
+        first = Pool.new(pool_name: :redis_pool, pool_timeout: 2, factory: ResourceFactory.new.freeze)
         second = Pool.new({ pool_name: :redis_pool, factory: ResourceFactory.new.freeze })
 
         assert_same config, (first.config = config)
         assert_same config, (second.config = config)
         assert_same first.instance_variable_get(:@local_pool), second.instance_variable_get(:@local_pool)
+        assert_equal first.pool_timeout, second.pool_timeout
         assert_same first.instance_variable_get(:@state_mutex), second.instance_variable_get(:@state_mutex)
         assert_same first.instance_variable_get(:@failure_count), second.instance_variable_get(:@failure_count)
         assert_same first.instance_variable_get(:@state_holder), second.instance_variable_get(:@state_holder)
@@ -312,6 +315,8 @@ module Sidekiq
       def test_rejects_invalid_configuration
         invalid_options = [
           { size: 0 },
+          { pool_timeout: -1 },
+          { pool_timeout: Object.new },
           { max_retries: -1 },
           { retry_delay: -1 },
           { cb_threshold: 0 },

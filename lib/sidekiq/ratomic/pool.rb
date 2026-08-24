@@ -15,16 +15,17 @@ module Sidekiq
     # with exponential backoff. Persistent failures open the circuit breaker.
     # rubocop:disable Metrics/ClassLength
     class Pool
-      attr_reader :pool_name, :size, :max_retries, :retry_delay, :validator, :cb_threshold, :cb_timeout,
-                  :retryable_errors
+      attr_reader :pool_name, :size, :pool_timeout, :max_retries, :retry_delay, :validator, :cb_threshold,
+                  :cb_timeout, :retryable_errors
 
       # rubocop:disable Metrics/MethodLength
-      def initialize(options = nil, pool_name: nil, size: 10, max_retries: 3, retry_delay: 0.2,
+      def initialize(options = nil, pool_name: nil, size: 10, pool_timeout: 1.0, max_retries: 3, retry_delay: 0.2,
                      cb_threshold: 5, cb_timeout: 30, validator: nil,
                      retryable_errors: [IOError, SystemCallError, Timeout::Error], factory: nil, &block)
         normalize_options!(options) do |config|
           pool_name = config.fetch(:pool_name, pool_name)
           size = config.fetch(:size, size)
+          pool_timeout = config.fetch(:pool_timeout, pool_timeout)
           max_retries = config.fetch(:max_retries, max_retries)
           retry_delay = config.fetch(:retry_delay, retry_delay)
           cb_threshold = config.fetch(:cb_threshold, cb_threshold)
@@ -38,10 +39,13 @@ module Sidekiq
         raise ArgumentError, 'A pool_name must be provided' unless pool_name
         raise ArgumentError, 'A resource factory must be provided' unless factory
 
-        validate_options!(size, max_retries, retry_delay, cb_threshold, cb_timeout)
+        validate_options!(
+          size:, pool_timeout:, max_retries:, retry_delay:, cb_threshold:, cb_timeout:
+        )
 
         @pool_name = pool_name.to_sym
         @size = size
+        @pool_timeout = pool_timeout
         @max_retries = max_retries
         @retry_delay = retry_delay
         @cb_threshold = cb_threshold
@@ -55,7 +59,7 @@ module Sidekiq
         raise ArgumentError, 'validator must respond to call' unless validator.nil? || validator.respond_to?(:call)
 
         shareable_factory = make_shareable_factory(factory)
-        @local_pool = ::Ratomic::LocalPool.new(size: @size, factory: shareable_factory)
+        @local_pool = ::Ratomic::LocalPool.new(size: @size, timeout: @pool_timeout, factory: shareable_factory)
       end
 
       # Share one pool runtime across Sidekiq's per-job middleware instances.
@@ -164,9 +168,11 @@ module Sidekiq
         error.is_a?(StandardError) && !error.is_a?(Pool::CheckoutError)
       end
 
-      def validate_options!(size, max_retries, retry_delay, cb_threshold, cb_timeout)
+      def validate_options!(size:, pool_timeout:, max_retries:, retry_delay:, cb_threshold:, cb_timeout:)
         validations = [
           [size.is_a?(Integer) && size.positive?, 'size must be a positive Integer'],
+          [pool_timeout.nil? || (pool_timeout.is_a?(Numeric) && pool_timeout >= 0),
+           'pool_timeout must be numeric or nil and non-negative'],
           [max_retries.is_a?(Integer) && max_retries >= 0, 'max_retries must be a non-negative Integer'],
           [retry_delay.is_a?(Numeric) && retry_delay >= 0, 'retry_delay must be non-negative'],
           [cb_threshold.is_a?(Integer) && cb_threshold.positive?, 'cb_threshold must be a positive Integer'],
@@ -182,7 +188,8 @@ module Sidekiq
         raise ArgumentError, 'middleware options must be a Hash' unless options.is_a?(Hash)
 
         config = options.transform_keys(&:to_sym)
-        allowed = %i[pool_name size max_retries retry_delay cb_threshold cb_timeout validator retryable_errors factory]
+        allowed = %i[pool_name size pool_timeout max_retries retry_delay cb_threshold cb_timeout validator
+                     retryable_errors factory]
         unknown = config.keys - allowed
         raise ArgumentError, "unknown middleware options: #{unknown.join(', ')}" unless unknown.empty?
 
@@ -191,6 +198,7 @@ module Sidekiq
 
       def adopt_runtime(runtime)
         @local_pool = runtime.instance_variable_get(:@local_pool)
+        @pool_timeout = runtime.instance_variable_get(:@pool_timeout)
         @state_mutex = runtime.instance_variable_get(:@state_mutex)
         @failure_count = runtime.instance_variable_get(:@failure_count)
         @state_holder = runtime.instance_variable_get(:@state_holder)

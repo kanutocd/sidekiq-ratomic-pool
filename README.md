@@ -53,6 +53,7 @@ Sidekiq.configure_server do |config|
     chain.add Sidekiq::Ratomic::Pool,
       pool_name: :redis_pool,
       size: 10,
+      pool_timeout: 1,
       max_retries: 3,
       retry_delay: 0.2,
       cb_threshold: 5,
@@ -85,16 +86,17 @@ Ractor's pool runtime there, and execute the resource-backed work inside the
 same Ractor:
 
 ```ruby
-PoolInput = Data.define(:pool_name, :size, :factory, :jobs)
+PoolInput = Data.define(:pool_name, :size, :pool_timeout, :factory, :jobs)
 
 ractor = Ractor.new(
   Ractor.make_shareable(
-    PoolInput.new(:redis_pool, 20, RedisFactory.new(ENV.fetch('REDIS_URL')), 100)
+    PoolInput.new(:redis_pool, 20, 1, RedisFactory.new(ENV.fetch('REDIS_URL')), 100)
   )
 ) do |input|
   pool = Sidekiq::Ratomic::Pool.new(
     pool_name: input.pool_name,
     size: input.size,
+    pool_timeout: input.pool_timeout,
     factory: input.factory
   )
 
@@ -113,6 +115,24 @@ Threads created by the host inside that Ractor use the same Ractor-local pool.
 Resources must not be returned to, or used by, another Ractor. See the
 [`Ractor-local pooling implementation plan`](docs/ractor-local-pooling-implementation-plan.md)
 for the integration contract and rollout criteria.
+
+The opt-in host adapter example demonstrates bounded dispatch and per-Ractor
+activity metrics without making Ractor scheduling part of the gem:
+
+```bash
+cd smoke_test
+RACTOR_NATIVE_COUNT="$(nproc)" \
+RACTOR_NATIVE_THREADS=20 \
+RATOMIC_POOL_SIZE=20 \
+RATOMIC_POOL_TIMEOUT=1 \
+RACTOR_QUEUE_CAPACITY=40 \
+BENCHMARK_JOBS_PER_RACTOR=20 \
+bundle exec ruby ./benchmark/ractor_host_adapter.rb
+```
+
+The adapter defaults its Ractor count to `Etc.nprocessors` when the variable
+is omitted. That CPU-based default belongs to the example only; production
+applications remain responsible for choosing and supervising their topology.
 
 The circuit breaker uses `Ratomic::Counter` for its failure count. This keeps the
 counter aligned with Ratomic's Ractor-safe primitive model and avoids a separate

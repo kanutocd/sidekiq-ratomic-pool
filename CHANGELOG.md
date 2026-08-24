@@ -16,6 +16,11 @@
   clear configuration error for unsupported factory state.
 - Added custom validator callability validation and regression coverage for the
   new Ractor-boundary configuration checks.
+- Added configurable LocalPool checkout timeouts through `pool_timeout`, with
+  synchronized middleware runtime adoption and RBS coverage.
+- Expanded the host-owned Ractor adapter with CPU-based defaults, bounded job
+  queues, configurable topology/workload controls, per-Ractor activity metrics,
+  and controlled failure cancellation/reporting.
 - Linked the benchmark from the smoke-test documentation.
 
 ## [0.2.0] - 2026-08-25
