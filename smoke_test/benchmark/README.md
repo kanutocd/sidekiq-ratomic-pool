@@ -1,8 +1,11 @@
-# Sidekiq/Ratomic benchmark
+# Sidekiq/Ratomic benchmarks
 
-This benchmark runs a real standalone Sidekiq server against the Redis service
-used by the smoke test. It measures end-to-end enqueue-to-completion time for
-jobs that use the injected `Ratomic::LocalPool` to perform Redis operations.
+The primary benchmark runs a real standalone Sidekiq server against the Redis
+service used by the smoke test. It measures end-to-end enqueue-to-completion
+time for jobs that use the injected `Ratomic::LocalPool` to perform Redis
+operations. The other sections cover a `connection_pool` comparison, direct
+Ractor-native work, independent Sidekiq processes, and a host-owned Ractor
+adapter.
 
 It is intended for comparative measurements, not as a stable performance claim.
 Run the same workload and environment when comparing changes.
@@ -36,13 +39,26 @@ Run the same workload with the standard `connection_pool` gem:
 
 ```bash
 cd smoke_test/benchmark
-BENCHMARK_JOB_COUNT=1000 BENCHMARK_CONCURRENCY=8 ./run_connection_pool.sh
+BENCHMARK_JOB_COUNT=1000 \
+BENCHMARK_CONCURRENCY=8 \
+RATOMIC_POOL_SIZE=8 \
+RATOMIC_POOL_TIMEOUT=1 \
+BENCHMARK_WORK_SECONDS=0.05 \
+./run_connection_pool.sh
 ```
 
-The comparison uses the same Redis service, Sidekiq concurrency, pool size,
-worker, Redis health `PING`, and benchmark timing. It compares pooling and
-throughput behavior only; `connection_pool` does not provide Ratomic's
-Ractor-local ownership model, circuit breaker, or retry policy.
+The runner accepts the same `BENCHMARK_JOB_COUNT`, `BENCHMARK_CONCURRENCY`,
+`RATOMIC_POOL_SIZE`, `RATOMIC_POOL_TIMEOUT`, `BENCHMARK_WORK_SECONDS`,
+`REDIS_URL`, and `BENCHMARK_RUN_ID` knobs as the Ratomic Sidekiq benchmark. It
+prints matching runtime, Redis, topology, timing, and throughput metadata, and
+uses the same worker, Redis health `PING`, `INCR`, and `HSET` operations. Keep
+the workload knobs identical and change only the pool implementation when
+comparing single-process outputs. `CONNECTION_POOL_TIMEOUT` remains accepted
+as a compatibility alias for `RATOMIC_POOL_TIMEOUT`.
+
+The comparison measures pooling and throughput behavior only;
+`connection_pool` does not provide Ratomic's Ractor-local ownership model,
+circuit breaker, or retry policy.
 
 ## Ractor-native `4 × 20` topology
 
@@ -122,20 +138,22 @@ threads × 20 resources, 20,000 total jobs, 0.05 seconds of work per job, and
 a 1-second checkout timeout. `BENCHMARK_JOBS_PER_RACTOR` is multiplied by the
 Ractor count, so use `5000` to produce 20,000 total jobs.
 
-All three runners print the visible CPU count, runtime versions, Redis version,
-run ID, topology, checkout timeout, workload, elapsed time, and throughput. The
-host adapter also prints per-Ractor results and queue capacity. For repeatable
-comparisons, run each command multiple times with the same explicit environment
-and compare the median or the full set of results. The native benchmark measures
-direct Redis work inside host-owned Ractors; the Sidekiq benchmark additionally
-includes queue polling, job fetch, middleware, acknowledgment, and server
-lifecycle overhead.
+The metadata-oriented runners print the visible CPU count, runtime versions,
+Redis version, run ID, topology, checkout timeout, workload, elapsed time, and
+throughput; the host adapter also prints per-Ractor results and queue capacity.
+The basic `./run.sh` runner prints elapsed time, throughput, and process/thread
+snapshots. For repeatable comparisons, run each command multiple times with the
+same explicit environment and compare the median or the full set of results.
+The native benchmark measures direct Redis work inside host-owned Ractors; the
+Sidekiq benchmarks additionally include queue polling, job fetch, middleware,
+acknowledgment, and server lifecycle overhead.
 
 ## Run more samples
 
 Keep Redis running while collecting a sample set, and use a unique
 `BENCHMARK_RUN_ID` for every run. The following commands use the same real-Redis
-workload across the process, native, and host-owned Ractor examples:
+job count and work duration, while intentionally exercising different
+topologies:
 
 ```bash
 cd smoke_test
@@ -149,6 +167,15 @@ BENCHMARK_WORK_SECONDS=0.05 \
 BENCHMARK_JOB_COUNT=20000 \
 BENCHMARK_RUN_ID=sidekiq-$(date +%s%N) \
 ./benchmark/run_four_sidekiq_servers.sh | tee /tmp/sidekiq-ratomic-four.out
+
+BENCHMARK_JOB_COUNT=20000 \
+BENCHMARK_CONCURRENCY=8 \
+RATOMIC_POOL_SIZE=8 \
+RATOMIC_POOL_TIMEOUT=1 \
+BENCHMARK_WORK_SECONDS=0.05 \
+BENCHMARK_TIMEOUT=180 \
+BENCHMARK_RUN_ID=connection-pool-$(date +%s%N) \
+./benchmark/run_connection_pool.sh | tee /tmp/sidekiq-connection-pool.out
 
 RACTOR_NATIVE_COUNT=4 \
 RACTOR_NATIVE_THREADS=20 \
@@ -175,5 +202,7 @@ docker compose down
 
 Repeat each command several times on an otherwise idle host. Compare elapsed
 time and jobs/sec using the median, and retain the complete output when sharing
-results. The host adapter’s 5,000 jobs are per Ractor, producing 20,000 total
-jobs with four Ractors.
+results. The `connection_pool` sample is a single Sidekiq process with eight
+workers and eight pooled connections; it is a pooling baseline, not the
+four-process topology. The host adapter’s 5,000 jobs are per Ractor, producing
+20,000 total jobs with four Ractors.

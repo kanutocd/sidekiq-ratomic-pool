@@ -77,7 +77,7 @@ Sidekiq.configure_server do |config|
       SmokeBenchmark::ConnectionPoolBenchmarkMiddleware,
       pool_name: :redis_pool,
       size: Integer(ENV.fetch('RATOMIC_POOL_SIZE', '4')),
-      timeout: Float(ENV.fetch('CONNECTION_POOL_TIMEOUT', '5')),
+      timeout: Float(ENV.fetch('RATOMIC_POOL_TIMEOUT', '1')),
       redis_url:
     )
   end

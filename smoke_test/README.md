@@ -51,9 +51,10 @@ Redis on port `6379`; override it with `REDIS_PORT` or provide a complete
 
 ## Benchmark
 
-For comparative throughput measurements, see [`benchmark/`](benchmark/). It
-uses the same real Redis and Sidekiq setup but reports end-to-end elapsed time
-and jobs per second:
+For comparative throughput measurements, see [`benchmark/`](benchmark/). The
+Sidekiq-backed benchmark runners use the same real Redis and standalone Sidekiq
+setup, while the host-owned Ractor adapter performs host-scheduled work against
+real Redis. They report end-to-end elapsed time and jobs per second:
 
 ```bash
 cd smoke_test/benchmark

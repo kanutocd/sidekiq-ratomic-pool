@@ -30,6 +30,8 @@
 - Added Redis server version metadata to the real-Redis benchmark runners.
 - Converted the host-owned Ractor adapter to real Redis resources and persisted
   a reproducible command for comparing its topology and throughput.
+- Aligned the `connection_pool` comparison runner with the Ratomic benchmark's
+  knobs, Redis workload, metadata, and output shape for apples-to-apples runs.
 - Enforced a single in-flight half-open circuit probe with concurrent fast
   failure for competing callers.
 - Added regression coverage for host-coordinated Ractor cancellation and
