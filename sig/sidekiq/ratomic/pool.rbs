@@ -6,16 +6,20 @@ module Sidekiq
       class Error < StandardError
       end
 
+      class CheckoutError < Error
+      end
+
       class CircuitOpenError < Error
       end
 
       attr_reader pool_name: Symbol
       attr_reader size: Integer
       attr_reader max_retries: Integer
-      attr_reader retry_delay: Numeric
+      attr_reader retry_delay: untyped
       attr_reader validator: ^(untyped) -> bool
       attr_reader cb_threshold: Integer
       attr_reader cb_timeout: Numeric
+      attr_reader retryable_errors: Array[Class]
 
       def initialize: (
         pool_name: Symbol | String,
@@ -25,15 +29,21 @@ module Sidekiq
         ?cb_threshold: Integer,
         ?cb_timeout: Numeric,
         ?validator: ^(untyped) -> bool,
+        ?retryable_errors: Array[Class],
         ?factory: _SidekiqRatomicFactory
       ) { () -> untyped } -> void
 
       def call: (untyped, untyped, untyped) { () -> untyped } -> untyped
+      def close: () -> nil
+      def shutdown: () -> nil
       def with: () { (untyped) -> untyped } -> untyped
       def state: () -> Symbol
       private
+      def validate_options!: (untyped, untyped, untyped, untyped, untyped) -> void
       def check_circuit_state!: () -> void
       def verify_health: (untyped) -> bool
+      def retryable_error?: (StandardError) -> bool
+      def work_error?: (StandardError) -> bool
       def default_validator: (untyped) -> bool
       def record_success: () -> void
       def record_failure: () -> void
@@ -44,4 +54,9 @@ end
 
 interface _SidekiqRatomicFactory
   def call: () -> untyped
+end
+
+module Timeout
+  class Error < StandardError
+  end
 end

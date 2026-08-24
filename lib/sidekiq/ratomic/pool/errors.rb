@@ -8,6 +8,9 @@ module Sidekiq
       # Base error for pool failures.
       class Error < StandardError; end
 
+      # Raised when a checked-out resource fails validation.
+      class CheckoutError < Error; end
+
       # Raised when the circuit breaker is open.
       class CircuitOpenError < Error; end
     end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'ratomic'
+require 'timeout'
 require_relative 'pool/errors'
 require_relative 'pool/version'
 
@@ -12,14 +13,17 @@ module Sidekiq
     #
     # Resources are validated before checkout and transient failures are retried
     # with exponential backoff. Persistent failures open the circuit breaker.
-    # rubocop:disable Metrics/MethodLength, Metrics/ParameterLists
     class Pool
-      attr_reader :pool_name, :size, :max_retries, :retry_delay, :validator, :cb_threshold, :cb_timeout
+      attr_reader :pool_name, :size, :max_retries, :retry_delay, :validator, :cb_threshold, :cb_timeout,
+                  :retryable_errors
 
       def initialize(pool_name:, size: 10, max_retries: 3, retry_delay: 0.2,
-                     cb_threshold: 5, cb_timeout: 30, validator: nil, factory: nil, &block)
+                     cb_threshold: 5, cb_timeout: 30, validator: nil,
+                     retryable_errors: [IOError, SystemCallError, Timeout::Error], factory: nil, &block)
         factory ||= block
         raise ArgumentError, 'A resource factory must be provided' unless factory
+
+        validate_options!(size, max_retries, retry_delay, cb_threshold, cb_timeout)
 
         @pool_name = pool_name.to_sym
         @size = size
@@ -28,6 +32,7 @@ module Sidekiq
         @cb_threshold = cb_threshold
         @cb_timeout = cb_timeout
         @validator = validator || method(:default_validator)
+        @retryable_errors = retryable_errors.freeze
         @state_mutex = Mutex.new
         @failure_count = ::Ratomic::Counter.new
         @state = :closed
@@ -44,23 +49,42 @@ module Sidekiq
         yield
       end
 
+      # Close resources owned by the current Ractor.
+      def close
+        @local_pool.close
+      end
+
+      alias shutdown close
+
       # Check out a healthy resource and yield it to the caller.
       def with
         check_circuit_state!
         attempts = 0
+        work_failed = false
 
         begin
           attempts += 1
           @local_pool.with do |resource|
-            raise 'Resource connection health check failed' unless verify_health(resource)
+            raise Pool::CheckoutError, 'Resource connection health check failed' unless verify_health(resource)
 
-            result = yield resource
+            begin
+              result = yield resource
+            rescue StandardError
+              work_failed = true
+              raise
+            end
             record_success
             result
           end
-        rescue StandardError
+        rescue StandardError => e
+          raise unless !work_failed || retryable_error?(e)
+
           record_failure
-          retry if attempts <= @max_retries && state != :open
+          if attempts <= @max_retries && state != :open
+            delay = @retry_delay * (2**(attempts - 1))
+            sleep(delay) if delay.positive?
+            retry
+          end
 
           raise
         end
@@ -89,6 +113,27 @@ module Sidekiq
         @validator.call(resource)
       rescue StandardError
         false
+      end
+
+      def retryable_error?(error)
+        !work_error?(error) || @retryable_errors.any? { |error_class| error.is_a?(error_class) }
+      end
+
+      def work_error?(error)
+        error.is_a?(StandardError) && !error.is_a?(Pool::CheckoutError)
+      end
+
+      def validate_options!(size, max_retries, retry_delay, cb_threshold, cb_timeout)
+        validations = [
+          [size.is_a?(Integer) && size.positive?, 'size must be a positive Integer'],
+          [max_retries.is_a?(Integer) && max_retries >= 0, 'max_retries must be a non-negative Integer'],
+          [retry_delay.is_a?(Numeric) && retry_delay >= 0, 'retry_delay must be non-negative'],
+          [cb_threshold.is_a?(Integer) && cb_threshold.positive?, 'cb_threshold must be a positive Integer'],
+          [cb_timeout.is_a?(Numeric) && cb_timeout >= 0, 'cb_timeout must be non-negative']
+        ]
+        validations.each do |valid, message|
+          raise ArgumentError, message unless valid
+        end
       end
 
       def default_validator(resource)
@@ -120,6 +165,5 @@ module Sidekiq
         Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end
     end
-    # rubocop:enable Metrics/MethodLength, Metrics/ParameterLists
   end
 end
