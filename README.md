@@ -111,10 +111,25 @@ end
 ractor.value
 ```
 
-Threads created by the host inside that Ractor use the same Ractor-local pool.
-Resources must not be returned to, or used by, another Ractor. See the
-[`Ractor-local pooling implementation plan`](docs/ractor-local-pooling-implementation-plan.md)
-for the integration contract and rollout criteria.
+Threads created by the host inside that Ractor use the same Ractor-local pool;
+resources must never be returned to, or used by, another Ractor. The integration
+contract is:
+
+- The host owns Ractor creation, job routing, supervision, and shutdown. This
+  gem provides pooling middleware, not a Ractor scheduler.
+- Pool configuration and factories crossing a Ractor boundary must be
+  shareable. Construct the mutable pool runtime and any stateful validator
+  inside the destination Ractor.
+- `Ratomic::LocalPool` lazily creates resources in their owning Ractor. Threads
+  in that Ractor share its resources, while other Ractors receive independent
+  pools and resources.
+- Retry, health validation, circuit breaking, failure accounting, and explicit
+  close/shutdown remain local to the runtime that owns the resources. A
+  half-open circuit admits one recovery probe at a time.
+
+The middleware runtime is ordinary mutable state and is not itself required to
+be Ractor-shareable. Hosts must supervise failures and coordinate cancellation
+across Ractors when their application topology requires it.
 
 The opt-in host adapter example demonstrates bounded dispatch, real Redis
 connections, and per-Ractor activity metrics without making Ractor scheduling

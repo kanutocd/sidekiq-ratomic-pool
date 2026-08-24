@@ -19,7 +19,7 @@ cd smoke_test
 
 The script starts Redis, launches Sidekiq as a separate process, enqueues jobs
 from a separate client process, waits for all jobs to be processed, and cleans
-up the Redis container and Sidekiq process. 
+up the Redis container and Sidekiq process.
 
 While jobs are running, it prints:
 
