@@ -26,7 +26,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir[
     'lib/**/*.rb',
     'sig/**/*.rbs',
-    'examples/**/*.rb',
+    'smoke_test/**/*.rb',
     'README.md',
     'CHANGELOG.md',
     'LICENSE.txt'

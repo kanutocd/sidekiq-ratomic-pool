@@ -9,3 +9,5 @@
 
 /.ignoreme/
 Gemfile.lock
+/smoke_test/.envrc
+*.gem
