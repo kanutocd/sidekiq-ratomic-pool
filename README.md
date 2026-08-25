@@ -51,13 +51,13 @@ end
 Sidekiq.configure_server do |config|
   config.server_middleware do |chain|
     chain.add Sidekiq::Ratomic::Pool,
-      pool_name: :redis_pool,
-      size: 10,
-      pool_timeout: 1,
-      max_retries: 3,
-      retry_delay: 0.2,
-      cb_threshold: 5,
-      cb_timeout: 30,
+      pool_name: :redis_pool, # Name of the worker accessor populated by the middleware
+      size: 10,               # Maximum number of resources owned by each Ractor-local pool.
+      pool_timeout: 1,        # Maximum time to wait for a resource checkout.
+      max_retries: 3,         # Maximum number of retries for checkout and configured retryable failures.
+      retry_delay: 0.2,       # Base delay in secs used for exponential retry backoff
+      cb_threshold: 5,        # Number of recorded failures required to open the circuit
+      cb_timeout: 30,         # Time an open circuit remains open before a half-open probe
       factory: RedisFactory.new(ENV.fetch('REDIS_URL')).freeze
   end
 end
@@ -176,7 +176,7 @@ failure-count and circuit-state transition as one operation.
 
 ## Smoke test
 
-The [`smoke_test/`](smoke_test/) harness runs Redis in Docker, starts a standalone
+The [`smoke_test/`](https://github.com/kanutocd/sidekiq-ratomic-pool/tree/main/smoke_test) harness runs Redis in Docker, starts a standalone
 Sidekiq server, enqueues jobs from a separate client process, and verifies the
 results through real Redis connections. It also prints `ps -L` snapshots showing
 Sidekiq worker threads and the CPU core (`PSR`) on which they were recently scheduled:
@@ -186,5 +186,5 @@ cd smoke_test
 ./run.sh
 ```
 
-For comparative throughput measurements, see the [`smoke_test/benchmark/`](smoke_test/benchmark/)
+For comparative throughput measurements, see the [`smoke_test/benchmark/`](https://github.com/kanutocd/sidekiq-ratomic-pool/tree/main/smoke_test/benchmark/)
 harness.
