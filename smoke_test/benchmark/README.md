@@ -39,9 +39,10 @@ Run the same workload with the standard `connection_pool` gem:
 
 ```bash
 cd smoke_test/benchmark
+SIDEKIQ_SERVER_COUNT=4 \
 BENCHMARK_JOB_COUNT=1000 \
-BENCHMARK_CONCURRENCY=8 \
-RATOMIC_POOL_SIZE=8 \
+BENCHMARK_CONCURRENCY=20 \
+RATOMIC_POOL_SIZE=20 \
 RATOMIC_POOL_TIMEOUT=1 \
 BENCHMARK_WORK_SECONDS=0.05 \
 ./run_connection_pool.sh
@@ -53,10 +54,15 @@ The runner accepts the same `BENCHMARK_JOB_COUNT`, `BENCHMARK_CONCURRENCY`,
 prints matching runtime, Redis, topology, timing, and throughput metadata, and
 uses the same worker, Redis health `PING`, `INCR`, and `HSET` operations. Keep
 the workload knobs identical and change only the pool implementation when
-comparing single-process outputs. `CONNECTION_POOL_TIMEOUT` remains accepted
-as a compatibility alias for `RATOMIC_POOL_TIMEOUT`.
+comparing outputs. `CONNECTION_POOL_SIZE` is accepted as an explicit
+connection-pool size; `CONNECTION_POOL_TIMEOUT` remains accepted as a
+compatibility alias for `RATOMIC_POOL_TIMEOUT`.
 
-The comparison measures pooling and throughput behavior only;
+The runner supports `SIDEKIQ_SERVER_COUNT` (default `1`) and starts one
+independent Sidekiq process per server. For an apples-to-apples topology
+comparison with the four-process Ratomic run, use four servers, 20 workers per
+server, and pool size 20 per server. The comparison measures pooling and
+throughput behavior only;
 `connection_pool` does not provide Ratomic's Ractor-local ownership model,
 circuit breaker, or retry policy.
 
@@ -157,6 +163,12 @@ topologies:
 
 ```bash
 cd smoke_test
+# Keep Docker's host port aligned with an already-exported REDIS_URL.
+export REDIS_PORT="${REDIS_PORT:-${REDIS_URL##*:}}"
+export REDIS_PORT="${REDIS_PORT%%/*}"
+export REDIS_PORT="${REDIS_PORT:-6380}"
+export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:${REDIS_PORT}/0}"
+export KEEP_REDIS=1
 docker compose up -d redis
 
 SIDEKIQ_SERVER_COUNT=4 \
@@ -169,8 +181,9 @@ BENCHMARK_RUN_ID=sidekiq-$(date +%s%N) \
 ./benchmark/run_four_sidekiq_servers.sh | tee /tmp/sidekiq-ratomic-four.out
 
 BENCHMARK_JOB_COUNT=20000 \
-BENCHMARK_CONCURRENCY=8 \
-RATOMIC_POOL_SIZE=8 \
+SIDEKIQ_SERVER_COUNT=4 \
+BENCHMARK_CONCURRENCY=20 \
+RATOMIC_POOL_SIZE=20 \
 RATOMIC_POOL_TIMEOUT=1 \
 BENCHMARK_WORK_SECONDS=0.05 \
 BENCHMARK_TIMEOUT=180 \
